@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
-// @version      1.7
+// @author       KozakNewton
+// @version      1.8
 // @description  Mannco.store helper for TF2: prices in keys (editable key price) and backpack.tf buttons (stats with unusual effect, item history).
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
