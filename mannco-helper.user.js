@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.8
+// @version      1.9
 // @description  Mannco.store helper for TF2: prices in keys (editable key price) and backpack.tf buttons (stats with unusual effect, item history).
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -384,6 +384,11 @@
     }
     if (found.includes('Unusual')) quality = 'Unusual';
     else if (found.length) quality = found[0];
+
+    // names that Mannco spells differently from backpack.tf
+    name = name.replace(/\bUbersaw\b/g, 'Übersaw');
+    // killstreak kits carry "(Sheen, Killstreaker)" in the Mannco name -> not part of the backpack.tf name
+    name = name.replace(/^(.*\bKit(?: Fabricator)?)\s*\([^)]*\)\s*$/i, '$1');
 
     // killstreak kits: normalise the weapon-specific ones to the "Professional Killstreak <Weapon> Kit" form
     let km = /^(Professional |Specialized )?Killstreak Kit( Fabricator)?\s*[-:]?\s*(.+)$/i.exec(name);
