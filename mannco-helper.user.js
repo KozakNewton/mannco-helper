@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.12
+// @version      1.15
 // @description  Mannco.store helper for TF2: prices in keys (editable key price) and backpack.tf buttons (stats with unusual effect, item history).
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -59,6 +59,15 @@
       user-select: none;
     }
     .mk-bp:hover { background: #5a8dee; color: #fff; }
+    .mk-bp.mk-bp-side {
+      position: static;
+      display: inline-block;
+      margin-left: 8px;
+      vertical-align: middle;
+      flex: none;
+      line-height: 1.4;
+      font-size: 0.8em;
+    }
     .mk-bp-inline {
       display: inline-block;
       margin-left: 10px;
@@ -258,18 +267,51 @@
 
   }
 
-  // backpack.tf button in the top-left corner of every item card
+  // backpack.tf button: top-left corner on big item cards, right of the name in lists / tables
+  function bpMode(a) {
+    let hasName = false;
+    try { hasName = !!parseCard(a).name; } catch (e) { /* ignore */ }
+    const hasImg = !!a.querySelector('img, picture, svg, [style*="background-image"]');
+    if (!hasName) return null;                       // icon-only link: no button on top of the icon
+    const r = a.getBoundingClientRect();
+    if (!r.width || !r.height) return 'wait';        // hidden for now
+    if (hasImg && r.width >= 110 && r.height >= 110) return 'overlay';
+    // another link to the same item right next to it already carries the name -> only one button
+    const href = a.getAttribute('href');
+    let box = a.parentElement;
+    for (let i = 0; i < 4 && box; i++, box = box.parentElement) {
+      const twins = Array.from(box.querySelectorAll('a[href]')).filter((x) => x !== a && x.getAttribute('href') === href);
+      for (const t of twins) {
+        if (a.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_PRECEDING) {
+          let tn = false;
+          try { tn = !!parseCard(t).name; } catch (e) { /* ignore */ }
+          if (tn) return null;
+        }
+      }
+    }
+    return 'side';
+  }
+
   function ensureBp(card) {
-    if (card.querySelector(':scope > .mk-bp')) return;
-    if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    const mode = bpMode(card);
+    const old = Array.from(card.children).find((c) => c.classList && c.classList.contains('mk-bp'));
+    if (mode === 'wait') return;
+    if (!mode) { if (old) old.remove(); return; }
+    if (old) {
+      if (old.dataset.mode === mode) return;
+      old.remove();
+    }
+    if (mode === 'overlay' && getComputedStyle(card).position === 'static') card.style.position = 'relative';
     const bp = document.createElement('span');
-    bp.className = 'mk-bp';
+    bp.className = 'mk-bp' + (mode === 'side' ? ' mk-bp-side' : '');
+    bp.dataset.mode = mode;
     bp.textContent = 'BP';
     bp.title = 'Open on backpack.tf';
     bp.addEventListener('click', (e) => {
       e.preventDefault();   // the card itself is a link to Mannco
       e.stopPropagation();
-      const url = buildBackpackUrl(card);
+      const slugM = /\/item\/440-([^/?#]+)/.exec(card.getAttribute('href') || '');
+      const url = buildBackpackUrl(card, slugM && slugM[1]);
       console.log('[mannco-keys] BP click:', parseCard(card), '->', url);
       if (url) window.open(url, '_blank', 'noopener');
     });
@@ -382,7 +424,7 @@
     'Syringe Gun', 'Bonesaw', 'Sniper Rifle', 'SMG', 'Kukri', 'Revolver', 'Knife', 'Wrench', 'Shovel',
   ].sort((a, b) => b.length - a.length);
 
-  function buildBackpackUrl(card) {
+  function buildBackpackUrl(card, slug) {
     const info = parseCard(card);
     let name = info.name;
     if (!name) {
@@ -412,6 +454,8 @@
     if (found.includes('Unusual')) quality = 'Unusual';
     else if (found.length) quality = found[0];
 
+    // the item page title may omit "Uncraftable", the URL slug (/item/440-uncraftable-...) never does
+    if (slug && /^uncraftable-/i.test(slug)) craftable = 'Non-Craftable';
     name = name.replace(/^The /, '');   // backpack.tf: "B.M.O.C.", not "The B.M.O.C."
     // names that Mannco spells differently from backpack.tf
     name = name.replace(/\bUbersaw\b/g, 'Übersaw');
@@ -427,7 +471,7 @@
       name = (km[2] || '') + 'Killstreak ' + km[1].trim() + ' Kit' + (km[3] || '');
     }
 
-    // weapon-specific killstreak kits and fabricators, e.g. .../stats/Unique/Kit/Tradable/Non-Craftable/3-37
+    // weapon-specific killstreak kits and fabricators, e.g. .../stats/Unique/Killstreak%20Kit/Tradable/Non-Craftable/3-37
     const kitM = /^(?:(Professional|Specialized) )?Killstreak (.+?) Kit( Fabricator)?$/i.exec(name);
     if (kitM) {
       const target = KIT_TARGETS[normWeapon(kitM[2])];
@@ -438,7 +482,7 @@
           const kitDef = tier === 3 ? 6526 : 6523;   // Professional / Specialized Killstreak Kit
           return 'https://backpack.tf/stats/Unique/Fabricator/Tradable/' + craftable + '/' + kitDef + '-6-' + target;
         }
-        return 'https://backpack.tf/stats/Unique/Kit/Tradable/' + craftable + '/' + tier + '-' + target;
+        return 'https://backpack.tf/stats/Unique/Killstreak%20Kit/Tradable/' + craftable + '/' + tier + '-' + target;
       }
       console.warn('[mannco-keys] unknown kit weapon:', kitM[2]);
     }
@@ -515,7 +559,7 @@
       const text = head ? headText(head) : cleanTitle(document.title);
       const tmp = document.createElement('div');
       tmp.textContent = text;
-      const url = buildBackpackUrl(tmp);
+      const url = buildBackpackUrl(tmp, m[1]);
       console.log('[mannco-keys] BP click (item page):', text, '->', url);
       if (url) window.open(url, '_blank', 'noopener');
     });
