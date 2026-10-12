@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.11
+// @version      1.12
 // @description  Mannco.store helper for TF2: prices in keys (editable key price) and backpack.tf buttons (stats with unusual effect, item history).
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -59,6 +59,23 @@
       user-select: none;
     }
     .mk-bp:hover { background: #5a8dee; color: #fff; }
+    .mk-bp-inline {
+      display: inline-block;
+      margin-left: 10px;
+      padding: 1px 8px;
+      vertical-align: middle;
+      background: rgba(20, 20, 26, 0.85);
+      border: 1px solid #5a8dee;
+      border-radius: 4px;
+      color: #5a8dee;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.4;
+      cursor: pointer;
+      user-select: none;
+    }
+    .mk-bp-inline:hover { background: #5a8dee; color: #fff; }
+    .mk-bp-float { position: fixed; top: 96px; left: 12px; z-index: 2147483000; margin: 0; }
   `;
   document.documentElement.appendChild(style);
 
@@ -298,7 +315,7 @@
     const w = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
     let n;
     while ((n = w.nextNode())) {
-      if (n.parentElement.closest('.mk-keys, .mk-bp, .mk-hist, script, style')) continue;
+      if (n.parentElement.closest('.mk-keys, .mk-bp, .mk-bp-inline, .mk-hist, script, style')) continue;
       const t = normText(n.nodeValue);
       if (t) out.push(t);
     }
@@ -451,6 +468,58 @@
       else console.warn('[mannco-keys] unknown unusual effect:', info.effect);
     }
     return url;
+  }
+
+  // ---------- BP button on the item page itself (/item/440-...) ----------
+  const alnum = (str) => String(str).toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  function cleanTitle(t) {
+    return normText(t)
+      .replace(/^buy\s+/i, '')
+      .replace(/\s*[|–—-]\s*mannco.*$/i, '')
+      .replace(/\s+(?:TF2|Team Fortress 2)$/i, '')
+      .trim();
+  }
+
+  const headText = (el) => cleanTitle(cardTexts(el).join(' '));
+
+  // the heading whose text is the item name (compared with the item slug in the URL)
+  function findPageTitleEl(slug) {
+    const s = alnum(slug);
+    const heads = Array.from(document.querySelectorAll('h1, h2, h3, [role="heading"]'))
+      .filter((h) => !h.closest('nav, footer'));
+    for (const h of heads) {
+      const t = alnum(headText(h));
+      if (t.length >= 3 && (t.includes(s) || s.includes(t))) return h;
+    }
+    return null;
+  }
+
+  function ensurePageBp() {
+    const m = /^\/item\/440-([^/?#]+)/.exec(location.pathname);
+    if (!m) {
+      document.querySelectorAll('.mk-bp-inline').forEach((b) => b.remove());
+      return;
+    }
+    const head = findPageTitleEl(m[1]);
+    if (head ? head.querySelector(':scope > .mk-bp-inline') : document.querySelector('.mk-bp-float')) return;
+    document.querySelectorAll('.mk-bp-inline').forEach((b) => b.remove());   // stale copy from a previous page
+
+    const bp = document.createElement('span');
+    bp.className = 'mk-bp-inline' + (head ? '' : ' mk-bp-float');
+    bp.textContent = 'BP';
+    bp.title = 'Open on backpack.tf';
+    bp.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = head ? headText(head) : cleanTitle(document.title);
+      const tmp = document.createElement('div');
+      tmp.textContent = text;
+      const url = buildBackpackUrl(tmp);
+      console.log('[mannco-keys] BP click (item page):', text, '->', url);
+      if (url) window.open(url, '_blank', 'noopener');
+    });
+    (head || document.body).appendChild(bp);
   }
 
   // ---------- backpack.tf item history button (Items list on item pages) ----------
@@ -650,6 +719,7 @@
         if (!a || !/\/item\/440-/.test(a.getAttribute('href') || '')) b.remove();
       });
       document.querySelectorAll('a[href*="/item/440-"]').forEach(ensureBp);
+      ensurePageBp();
       ensureHistoryButtons();
     } finally {
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
