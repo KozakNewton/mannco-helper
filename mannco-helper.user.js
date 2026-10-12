@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.9
+// @version      1.11
 // @description  Mannco.store helper for TF2: prices in keys (editable key price) and backpack.tf buttons (stats with unusual effect, item history).
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -348,6 +348,16 @@
   }
 
   // ---------- backpack.tf stats URL ----------
+  // weapon name -> defindex (source: TF2 schema). backpack.tf names kits "Kit" and puts "<tier>-<defindex>" in the URL
+  const KIT_DATA = `26 Destruction PDA|27 Disguise Kit|28 PDA|35 Kritzkrieg|36 Blutsauger|37 Ubersaw|38 Axtinguisher|39 Flare Gun|40 Backburner|41 Natascha|42 Sandvich|43 Killing Gloves of Boxing|44 Sandman|45 Force-a-Nature|46 Bonk! Atomic Punch|56 Huntsman|58 Jarate|59 Dead Ringer|60 Cloak and Dagger|61 Ambassador|127 Direct Hit|128 Equalizer|129 Buff Banner|130 Scottish Resistance|132 Eyelander|140 Wrangler|141 Frontier Justice|142 Gunslinger|153 Homewrecker|154 Pain Train|155 Southern Hospitality|159 Dalokohs Bar|160 Lugermorph|161 Big Kill|163 Crit-a-Cola|169 Golden Wrench|171 Tribalman's Shiv|172 Scotsman's Skullcutter|173 Vita-Saw|190 Bat|191 Bottle|192 Fire Axe|193 Kukri|194 Knife|195 Fists|196 Shovel|197 Wrench|198 Bonesaw|199 Shotgun|200 Scattergun|201 Sniper Rifle|202 Minigun|203 SMG|204 Syringe Gun|205 Rocket Launcher|206 Grenade Launcher|207 Stickybomb Launcher|208 Flame Thrower|209 Pistol|210 Revolver|211 Medi Gun|212 Invis Watch|214 Powerjack|215 Degreaser|220 Shortstop|221 Holy Mackerel|222 Mad Milk|224 L'Etranger|225 Your Eternal Reward|226 Battalion's Backup|228 Black Box|230 Sydney Sleeper|232 Bushwacka|237 Rocket Jumper|239 Gloves of Running Urgently|264 Frying Pan|265 Sticky Jumper|266 Horseless Headless Horsemann's Headtaker|297 Enthusiast's Timepiece|298 Iron Curtain|304 Amputator|305 Crusader's Crossbow|307 Ullapool Caber|308 Loch-n-Load|310 Warrior's Spirit|311 Buffalo Steak Sandvich|312 Brass Beast|317 Candy Cane|325 Boston Basher|326 Back Scratcher|327 Claidheamh Mor|329 Jag|331 Fists of Steel|348 Sharpened Volcano Fragment|349 Sun-on-a-Stick|351 Detonator|354 Concheror|355 Fan O'War|356 Conniver's Kunai|357 Half-Zatoichi|401 Shahanshah|402 Bazaar Bargain|404 Persian Persuader|411 Quick-Fix|412 Overdose|413 Solemn Vow|414 Liberty Launcher|415 Reserve Shooter|416 Market Gardener|423 Saxxy|424 Tomislav|425 Family Business|426 Eviction Notice|433 Fishcake|441 Cow Mangler 5000|442 Righteous Bison|447 Disciplinary Action|448 Soda Popper|449 Winger|450 Atomizer|452 Three-Rune Blade|457 Postal Pummeler|460 Enforcer|461 Big Earner|466 Maul|474 Conscientious Objector|482 Nessie's Nine Iron|513 Original|525 Diamondback|526 Machina|527 Widowmaker|528 Short Circuit|572 Unarmed Combat|574 Wanga Prick|587 Apoco-Fists|588 Pomson 6000|589 Eureka Effect|593 Third Degree|594 Phlogistinator|595 Manmelter|609 Scottish Handshake|638 Sharp Dresser|648 Wrap Assassin|649 Spy-Cicle|654 Festive Minigun|656 Holiday Punch|658 Festive Rocket Launcher|659 Festive Flame Thrower|660 Festive Bat|661 Festive Stickybomb Launcher|662 Festive Wrench|663 Festive Medi Gun|664 Festive Sniper Rifle|665 Festive Knife|669 Festive Scattergun|727 Black Rose|730 Beggar's Bazooka|736 Sapper|737 Construction PDA|739 Lollichop|740 Scorch Shot|741 Rainblower|751 Cleaner's Carbine|752 Hitman's Heatmaker|772 Baby Face's Blaster|773 Pretty Boy's Pocket Pistol|775 Escape Plan|792 Silver Botkiller Sniper Rifle Mk.I|793 Silver Botkiller Minigun Mk.I|794 Silver Botkiller Knife Mk.I|795 Silver Botkiller Wrench Mk.I|796 Silver Botkiller Medi Gun Mk.I|797 Silver Botkiller Stickybomb Launcher Mk.I|798 Silver Botkiller Flame Thrower Mk.I|799 Silver Botkiller Scattergun Mk.I|800 Silver Botkiller Rocket Launcher Mk.I|801 Gold Botkiller Sniper Rifle Mk.I|802 Gold Botkiller Minigun Mk.I|803 Gold Botkiller Knife Mk.I|804 Gold Botkiller Wrench Mk.I|805 Gold Botkiller Medi Gun Mk.I|806 Gold Botkiller Stickybomb Launcher Mk.I|807 Gold Botkiller Flame Thrower Mk.I|808 Gold Botkiller Scattergun Mk.I|809 Gold Botkiller Rocket Launcher Mk.I|810 Red-Tape Recorder|811 Huo-Long Heater|812 Flying Guillotine|813 Neon Annihilator|850 Deflector|851 AWPer Hand|863 Robo-Sandvich|880 Freedom Staff|881 Rust Botkiller Sniper Rifle Mk.I|882 Rust Botkiller Minigun Mk.I|883 Rust Botkiller Knife Mk.I|884 Rust Botkiller Wrench Mk.I|885 Rust Botkiller Medi Gun Mk.I|886 Rust Botkiller Stickybomb Launcher Mk.I|887 Rust Botkiller Flame Thrower Mk.I|888 Rust Botkiller Scattergun Mk.I|889 Rust Botkiller Rocket Launcher Mk.I|890 Blood Botkiller Sniper Rifle Mk.I|891 Blood Botkiller Minigun Mk.I|892 Blood Botkiller Knife Mk.I|893 Blood Botkiller Wrench Mk.I|894 Blood Botkiller Medi Gun Mk.I|895 Blood Botkiller Stickybomb Launcher Mk.I|896 Blood Botkiller Flame Thrower Mk.I|897 Blood Botkiller Scattergun Mk.I|898 Blood Botkiller Rocket Launcher Mk.I|899 Carbonado Botkiller Sniper Rifle Mk.I|900 Carbonado Botkiller Minigun Mk.I|901 Carbonado Botkiller Knife Mk.I|902 Carbonado Botkiller Wrench Mk.I|903 Carbonado Botkiller Medi Gun Mk.I|904 Carbonado Botkiller Stickybomb Launcher Mk.I|905 Carbonado Botkiller Flame Thrower Mk.I|906 Carbonado Botkiller Scattergun Mk.I|907 Carbonado Botkiller Rocket Launcher Mk.I|908 Diamond Botkiller Sniper Rifle Mk.I|909 Diamond Botkiller Minigun Mk.I|910 Diamond Botkiller Knife Mk.I|911 Diamond Botkiller Wrench Mk.I|912 Diamond Botkiller Medi Gun Mk.I|913 Diamond Botkiller Stickybomb Launcher Mk.I|914 Diamond Botkiller Flame Thrower Mk.I|915 Diamond Botkiller Scattergun Mk.I|916 Diamond Botkiller Rocket Launcher Mk.I|933 Ap-Sap|939 Bat Outta Hell|947 Quackenbirdt|954 Memory Maker|957 Silver Botkiller Sniper Rifle Mk.II|958 Silver Botkiller Minigun Mk.II|959 Silver Botkiller Knife Mk.II|960 Silver Botkiller Wrench Mk.II|961 Silver Botkiller Medi Gun Mk.II|962 Silver Botkiller Stickybomb Launcher Mk.II|963 Silver Botkiller Flame Thrower Mk.II|964 Silver Botkiller Scattergun Mk.II|965 Silver Botkiller Rocket Launcher Mk.II|966 Gold Botkiller Sniper Rifle Mk.II|967 Gold Botkiller Minigun Mk.II|968 Gold Botkiller Knife Mk.II|969 Gold Botkiller Wrench Mk.II|970 Gold Botkiller Medi Gun Mk.II|971 Gold Botkiller Stickybomb Launcher Mk.II|972 Gold Botkiller Flame Thrower Mk.II|973 Gold Botkiller Scattergun Mk.II|974 Gold Botkiller Rocket Launcher Mk.II|996 Loose Cannon|997 Rescue Ranger|998 Vaccinator|999 Festive Holy Mackerel|1000 Festive Axtinguisher|1001 Festive Buff Banner|1002 Festive Sandvich|1003 Festive Ubersaw|1004 Festive Frontier Justice|1005 Festive Huntsman|1006 Festive Ambassador|1007 Festive Grenade Launcher|1013 Ham Shank|1071 Golden Frying Pan|1078 Festive Force-a-Nature|1079 Festive Crusader's Crossbow|1080 Festive Sapper|1081 Festive Flare Gun|1082 Festive Eyelander|1083 Festive Jarate|1084 Festive Gloves of Running Urgently|1085 Festive Black Box|1086 Festive Wrangler|1092 Fortified Compound|1098 Classic|1100 Bread Bite|1101 B.A.S.E. Jumper|1102 Snack Attack|1103 Back Scatter|1104 Air Strike|1105 Self-Aware Beauty Mark|1121 Mutated Milk|1123 Necro Smasher|1127 Crossing Guard|1141 Festive Shotgun|1142 Festive Revolver|1143 Festive Bonesaw|1145 Festive Bonk! Atomic Punch|1146 Festive Backburner|1149 Festive SMG|1150 Quickiebomb Launcher|1151 Iron Bomber|1153 Panic Attack|1178 Dragon's Fury|1179 Thermal Thruster|1180 Gas Passer|1181 Hot Hand|1190 Second Banana|1202 Reissued Lugermorph|1205 Reissued Enthusiast's Timepiece|1206 Reissued Iron Curtain|30474 Nostromo Napalmer|30665 Shooting Star|30666 C.A.P.P.E.R|30667 Batsaber|30668 Giger Counter|30758 Prinny Machete`;
+  const normWeapon = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/^the /, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const KIT_TARGETS = {};
+  KIT_DATA.split('|').forEach((e) => {
+    const i = e.indexOf(' ');
+    KIT_TARGETS[normWeapon(e.slice(i + 1))] = e.slice(0, i);
+  });
+
   const WEAR_RE = /\s*\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle Scarred)\)\s*$/i;
   const WEAPONS = [
     'Scattergun', 'Pistol', 'Shotgun', 'Rocket Launcher', 'Bat', 'Flame Thrower', 'Fire Axe',
@@ -385,6 +395,7 @@
     if (found.includes('Unusual')) quality = 'Unusual';
     else if (found.length) quality = found[0];
 
+    name = name.replace(/^The /, '');   // backpack.tf: "B.M.O.C.", not "The B.M.O.C."
     // names that Mannco spells differently from backpack.tf
     name = name.replace(/\bUbersaw\b/g, 'Übersaw');
     // killstreak kits carry "(Sheen, Killstreaker)" in the Mannco name -> not part of the backpack.tf name
@@ -397,6 +408,22 @@
     } else if ((km = /^(.+?) (Professional |Specialized )?Killstreak Kit( Fabricator)?$/i.exec(name)) &&
                !/^(Professional|Specialized)$/i.test(km[1])) {
       name = (km[2] || '') + 'Killstreak ' + km[1].trim() + ' Kit' + (km[3] || '');
+    }
+
+    // weapon-specific killstreak kits and fabricators, e.g. .../stats/Unique/Kit/Tradable/Non-Craftable/3-37
+    const kitM = /^(?:(Professional|Specialized) )?Killstreak (.+?) Kit( Fabricator)?$/i.exec(name);
+    if (kitM) {
+      const target = KIT_TARGETS[normWeapon(kitM[2])];
+      if (target) {
+        const tierName = (kitM[1] || '').toLowerCase();
+        const tier = tierName === 'professional' ? 3 : tierName === 'specialized' ? 2 : 1;
+        if (kitM[3]) {
+          const kitDef = tier === 3 ? 6526 : 6523;   // Professional / Specialized Killstreak Kit
+          return 'https://backpack.tf/stats/Unique/Fabricator/Tradable/' + craftable + '/' + kitDef + '-6-' + target;
+        }
+        return 'https://backpack.tf/stats/Unique/Kit/Tradable/' + craftable + '/' + tier + '-' + target;
+      }
+      console.warn('[mannco-keys] unknown kit weapon:', kitM[2]);
     }
 
     // weapon skins / war paints: backpack.tf uses "Skin | Weapon (Wear)" with quality Decorated Weapon
