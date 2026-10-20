@@ -2,8 +2,8 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.15
-// @description  Mannco.store helper for TF2: prices in keys (editable key price) and backpack.tf buttons (stats with unusual effect, item history).
+// @version      1.17
+// @description  Mannco.store helper for TF2: prices in keys (editable key price, optional ref) and backpack.tf buttons (stats with unusual effect, item history).
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
 // @updateURL    https://raw.githubusercontent.com/KozakNewton/mannco-helper/main/mannco-helper.user.js
@@ -19,7 +19,7 @@
 (function () {
   'use strict';
 
-  const DEFAULT_KEY_PRICE = 2.20; // USD – uprav si v panelu na stránce
+  const DEFAULT_KEY_PRICE = 1.75; // USD – uprav si v panelu na stránce
   // celý textový uzel je cena: "$46.93", "$ 7,600.00", "US$12.00" (\s zahrnuje i nbsp)
   const PRICE_RE = /^\s*(?:US)?\$\s*(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?\s*$/;
   const NUM_RE = /^\s*(\d{1,3}(?:,\d{3})+|\d+)(\.\d{1,2})?\s*$/;
@@ -27,7 +27,13 @@
   let keyPrice = parseFloat(GM_getValue('keyPrice', DEFAULT_KEY_PRICE));
   if (!(keyPrice > 0)) keyPrice = DEFAULT_KEY_PRICE;
 
-  console.log('[mannco-keys] script loaded, key price = $' + keyPrice);
+  // optional second conversion: keys + ref (1 key = X ref, entered by hand, off by default)
+  const DEFAULT_REF_PER_KEY = 64;
+  let refPerKey = parseFloat(GM_getValue('refPerKey', DEFAULT_REF_PER_KEY));
+  if (!(refPerKey > 0)) refPerKey = DEFAULT_REF_PER_KEY;
+  let useRef = GM_getValue('useRef', false) === true;
+
+  console.log('[mannco-keys] script loaded, key price = $' + keyPrice + (useRef ? ', 1 key = ' + refPerKey + ' ref' : ''));
 
   // ---------- styl štítků (globální) ----------
   const style = document.createElement('style');
@@ -41,6 +47,27 @@
       color: #ffc107;
       font-size: 0.85em;
       font-weight: 600;
+      white-space: nowrap;
+    }
+    .mk-keys .mk-r { color: #9ca3af; }
+    .mk-keys .mk-k + .mk-r { margin-left: 4px; }
+    /* narrow side panels / scrollable lists: small chip under the price instead of next to it,
+       so it never makes the surrounding tiles, rows or buttons wider */
+    .mk-keys.mk-compact {
+      display: block;
+      width: fit-content;
+      max-width: 100%;
+      margin: 2px 0 0 0;
+      padding: 0 5px;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: normal;
+    }
+    /* price sits in a flex/grid row (a block chip would still sit next to it) -> small chip with a tiny gap */
+    .mk-keys.mk-compact.mk-row {
+      display: inline-block;
+      margin: 0 0 0 4px;
+      align-self: center;
       white-space: nowrap;
     }
     .mk-bp {
@@ -65,6 +92,8 @@
       margin-left: 8px;
       vertical-align: middle;
       flex: none;
+      align-self: center;   /* inside a flex row: keep the natural height instead of stretching to the row */
+      height: auto;
       line-height: 1.4;
       font-size: 0.8em;
     }
@@ -97,42 +126,89 @@
     <style>
       .panel {
         background: #1e1e24; color: #eee; border: 1px solid #444; border-radius: 8px;
-        padding: 8px 10px; font: 13px/1.3 sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.5);
-        display: flex; align-items: center; gap: 6px;
+        padding: 6px 8px; font: 13px/1.3 sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+        display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;
+        max-width: calc(100vw - 24px); box-sizing: border-box;
       }
-      input {
-        width: 70px; padding: 3px 5px; background: #2b2b33; color: #fff;
+      input[type="number"] {
+        width: 64px; padding: 3px 5px; background: #2b2b33; color: #fff;
         border: 1px solid #555; border-radius: 4px;
       }
+      input[type="checkbox"] { margin: 0; }
+      label { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+      .refbox { display: none; align-items: center; gap: 3px; }
+      .refbox input[type="number"] { width: 50px; padding: 3px 4px; }
+      .panel.ref-on .refbox { display: flex; }
       button {
         padding: 3px 9px; background: #ffc107; color: #000; border: 0;
         border-radius: 4px; cursor: pointer; font-weight: 600;
       }
+      .min { padding: 0 6px; background: none; color: #aaa; font-size: 18px; line-height: 1; }
+      .min:hover { color: #fff; }
+      .fab {
+        display: none; width: 34px; height: 34px; padding: 0; border-radius: 50%;
+        background: #1e1e24; border: 1px solid #444; font-size: 17px; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+      }
+      #wrap.collapsed .panel { display: none; }
+      #wrap.collapsed .fab { display: block; }
       .ok { color: #6f6; opacity: 0; transition: opacity .3s; }
       .ok.show { opacity: 1; }
     </style>
-    <div class="panel">
-      <span>🔑 1 key = $</span>
-      <input type="number" step="0.01" min="0.01" id="in">
-      <button id="save">Save</button>
-      <span class="ok" id="ok">✓</span>
+    <div id="wrap">
+      <div class="panel" id="panel">
+        <span>🔑 1 key = $</span>
+        <input type="number" step="0.01" min="0.01" id="in">
+        <label title="Also show prices in ref"><input type="checkbox" id="useref"> ref</label>
+        <span class="refbox" title="How many ref 1 key is worth"><input type="number" step="0.01" min="0.01" id="refin">/key</span>
+        <button id="save">Save</button>
+        <span class="ok" id="ok">✓</span>
+        <button class="min" id="min" title="Collapse">–</button>
+      </div>
+      <button class="fab" id="fab" title="Mannco Helper: key price / ref">🔑</button>
     </div>
   `;
   const input = shadow.getElementById('in');
+  const refInput = shadow.getElementById('refin');
+  const refCheck = shadow.getElementById('useref');
+  const panelEl = shadow.getElementById('panel');
+  const wrap = shadow.getElementById('wrap');
   const ok = shadow.getElementById('ok');
   input.value = keyPrice.toFixed(2);
+  refInput.value = refPerKey.toFixed(2);
+  refCheck.checked = useRef;
+  panelEl.classList.toggle('ref-on', useRef);
+
+  // collapsible: the whole panel shrinks to a small 🔑 button (remembered)
+  let collapsed = GM_getValue('collapsed', false) === true;
+  wrap.classList.toggle('collapsed', collapsed);
+  function setCollapsed(c) {
+    collapsed = c;
+    GM_setValue('collapsed', c);
+    wrap.classList.toggle('collapsed', c);
+  }
+  shadow.getElementById('min').addEventListener('click', () => setCollapsed(true));
+  shadow.getElementById('fab').addEventListener('click', () => setCollapsed(false));
+
+  const parseNum = (s) => parseFloat(String(s).replace(',', '.'));
 
   function save() {
-    const v = parseFloat(String(input.value).replace(',', '.'));
-    if (!(v > 0)) return;
-    keyPrice = v;
-    GM_setValue('keyPrice', v);
+    const v = parseNum(input.value);
+    const r = parseNum(refInput.value);
+    if (!(v > 0) && !(r > 0)) return;
+    if (v > 0) { keyPrice = v; GM_setValue('keyPrice', v); }
+    if (r > 0) { refPerKey = r; GM_setValue('refPerKey', r); }
     updateAll();
     ok.classList.add('show');
     setTimeout(() => ok.classList.remove('show'), 1200);
   }
   shadow.getElementById('save').addEventListener('click', save);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+  [input, refInput].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); }));
+  refCheck.addEventListener('change', () => {
+    useRef = refCheck.checked;
+    GM_setValue('useRef', useRef);
+    panelEl.classList.toggle('ref-on', useRef);
+    updateAll();
+  });
 
   function ensurePanel() {
     if (!host.isConnected) document.documentElement.appendChild(host);
@@ -140,13 +216,91 @@
   }
 
   // ---------- přepočet ----------
-  function format(usd) {
-    return (usd / keyPrice).toFixed(2) + ' keys';
+  // chip shows numbers only: yellow = keys, grey = ref (full text in the tooltip)
+  //   default: "10.88";   with ref enabled: "10" + "48.4" (whole keys + the rest in ref), "1.1" (grey) below one key
+  function parts(usd) {
+    if (!useRef) {
+      const k = (usd / keyPrice).toFixed(2);
+      return { k, r: null, full: k + ' keys' };
+    }
+    const totalRef = (usd / keyPrice) * refPerKey;
+    let keys = Math.floor(totalRef / refPerKey + 1e-9);
+    let ref = Math.round((totalRef - keys * refPerKey) * 100) / 100;
+    if (ref >= refPerKey) { keys += 1; ref = 0; }   // rounding carried over to a whole key
+    const refTxt = ref.toFixed(2).replace(/\.?0+$/, '');   // 48.40 -> 48.4, 3.00 -> 3
+    const showRef = ref > 0 || keys === 0;
+    const full = (keys ? keys + (keys === 1 ? ' key' : ' keys') : '') + (keys && showRef ? ' ' : '') + (showRef ? refTxt + ' ref' : '');
+    return { k: keys ? String(keys) : null, r: showRef ? refTxt : null, full };
+  }
+
+  function render(el, usd) {
+    const p = parts(usd);
+    el.textContent = '';
+    if (p.k !== null) {
+      const k = document.createElement('span');
+      k.className = 'mk-k';
+      k.textContent = p.k;
+      el.appendChild(k);
+    }
+    if (p.r !== null) {
+      const r = document.createElement('span');
+      r.className = 'mk-r';
+      r.textContent = p.r;
+      el.appendChild(r);
+    }
+    el.title = p.full;
   }
 
   function updateAll() {
-    document.querySelectorAll('.mk-keys').forEach((el) => {
-      el.textContent = format(parseFloat(el.dataset.usd));
+    document.querySelectorAll('.mk-keys').forEach((el) => render(el, parseFloat(el.dataset.usd)));
+  }
+
+  // ---------- compact chips in narrow panels ----------
+  // Detected from the layout itself: a chip is made compact when one of its (narrow, <= 720 px) ancestors
+  // does not fit its content horizontally (scrollWidth > clientWidth), or is a scrollable / fixed / sticky box.
+  // That is the seller-inventory item menu, the deposit list, drawers ... The chip must not widen anything there.
+  // Once a chip is compact it stays compact (no flipping back and forth). Reads first, writes after.
+  const COMPACT_MAX_WIDTH = 720;
+  function updateCompact() {
+    const badges = Array.from(document.querySelectorAll('.mk-keys'));
+    if (!badges.length) return;
+    const panelCache = new Map();
+    const flexCache = new Map();
+    const isPanel = (el) => {
+      let v = panelCache.get(el);
+      if (v === undefined) {
+        v = false;
+        const w = el.clientWidth;
+        if (w > 0 && w <= COMPACT_MAX_WIDTH) {
+          const cs = getComputedStyle(el);
+          const scrolls = /auto|scroll/.test(cs.getPropertyValue('overflow-x')) || /auto|scroll/.test(cs.getPropertyValue('overflow-y'));
+          const pos = cs.getPropertyValue('position');
+          v = scrolls || pos === 'fixed' || pos === 'sticky' || el.scrollWidth > w + 1;
+        }
+        panelCache.set(el, v);
+      }
+      return v;
+    };
+    const inFlexRow = (p) => {
+      let v = flexCache.get(p);
+      if (v === undefined) {
+        const cs = getComputedStyle(p);
+        v = /flex|grid/.test(cs.getPropertyValue('display')) && !/column/.test(cs.getPropertyValue('flex-direction') || '');
+        flexCache.set(p, v);
+      }
+      return v;
+    };
+    const plan = badges.map((b) => {
+      let compact = b.dataset.mkc === '1';
+      for (let el = b.parentElement; !compact && el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+        if (isPanel(el)) compact = true;
+      }
+      return [b, compact, compact && !!b.parentElement && inFlexRow(b.parentElement)];
+    });
+    plan.forEach(([b, compact, row]) => {
+      if (compact && b.dataset.mkc !== '1') b.dataset.mkc = '1';
+      if (b.classList.contains('mk-compact') !== compact) b.classList.toggle('mk-compact', compact);
+      if (b.classList.contains('mk-row') !== row) b.classList.toggle('mk-row', row);
     });
   }
 
@@ -255,14 +409,14 @@
       // už existuje – jen aktualizuj, pokud se cena změnila
       if (parseFloat(next.dataset.usd) !== usd) {
         next.dataset.usd = usd;
-        next.textContent = format(usd);
+        render(next, usd);
       }
       return;
     }
     const span = document.createElement('span');
     span.className = 'mk-keys';
     span.dataset.usd = usd;
-    span.textContent = format(usd);
+    render(span, usd);
     anchorNode.parentNode.insertBefore(span, anchorNode.nextSibling);
 
   }
@@ -417,6 +571,12 @@
     KIT_TARGETS[normWeapon(e.slice(i + 1))] = e.slice(0, i);
   });
 
+  // Items whose Mannco spelling differs from the backpack.tf one (capital letters, missing hyphens).
+  // Key = lowercase letters/digits only, so any spelling on Mannco maps to the exact backpack.tf name.
+  const nameKey = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const NAME_FIXES = {};
+  ['Head of Defense', 'A Hat with No Name', 'Wrap-A-Khamon', 'Beanie the All-Gnawing'].forEach((n) => { NAME_FIXES[nameKey(n)] = n; });
+
   const WEAR_RE = /\s*\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle Scarred)\)\s*$/i;
   const WEAPONS = [
     'Scattergun', 'Pistol', 'Shotgun', 'Rocket Launcher', 'Bat', 'Flame Thrower', 'Fire Axe',
@@ -459,6 +619,7 @@
     name = name.replace(/^The /, '');   // backpack.tf: "B.M.O.C.", not "The B.M.O.C."
     // names that Mannco spells differently from backpack.tf
     name = name.replace(/\bUbersaw\b/g, 'Übersaw');
+    name = NAME_FIXES[nameKey(name)] || name;
     // killstreak kits carry "(Sheen, Killstreaker)" in the Mannco name -> not part of the backpack.tf name
     name = name.replace(/^(.*\bKit(?: Fabricator)?)\s*\([^)]*\)\s*$/i, '$1');
 
@@ -719,7 +880,7 @@
           if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEXTAREA') {
             return NodeFilter.FILTER_REJECT;
           }
-          if (p.classList.contains('mk-keys')) return NodeFilter.FILTER_REJECT;
+          if (p.closest('.mk-keys')) return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
         },
       });
@@ -765,6 +926,7 @@
       document.querySelectorAll('a[href*="/item/440-"]').forEach(ensureBp);
       ensurePageBp();
       ensureHistoryButtons();
+      updateCompact();
     } finally {
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     }
