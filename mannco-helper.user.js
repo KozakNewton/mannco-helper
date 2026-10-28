@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.24
+// @version      1.25
 // @description  Mannco.store helper for TF2: prices in keys (editable key price, optional ref), backpack.tf buttons (stats with unusual effect, item history) and Steam Community Market buttons.
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -101,6 +101,9 @@
     .mk-grp { position: absolute; top: 6px; left: 6px; z-index: 5; display: inline-flex; gap: 4px; align-items: stretch; }
     .mk-grp.mk-grp-side { position: static; margin-left: 8px; vertical-align: middle; flex: none; align-self: center; height: auto; line-height: 1.4; }
     .mk-grp .mk-bp, .mk-grp .mk-scm { position: static; margin: 0; display: inline-block; line-height: 1.4; }
+    /* in lists / tables the pair is a bit smaller, so it takes less room from the name */
+    .mk-grp-side { gap: 3px; }
+    .mk-grp-side .mk-bp, .mk-grp-side .mk-scm { font-size: 0.72em; padding: 1px 5px; }
     /* the same pair next to the heading on the item page (or floating in the corner when there is no heading) */
     .mk-pgrp { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; align-items: stretch; }
     .mk-pgrp .mk-bp-inline, .mk-pgrp .mk-scm-inline { margin: 0; }
@@ -464,6 +467,17 @@
 
   }
 
+  // size of the biggest picture inside the link (px, the shorter side); our own buttons are ignored
+  function imageSize(a) {
+    let max = 0;
+    a.querySelectorAll('img, picture, svg, [style*="background-image"]').forEach((e) => {
+      if (e.closest('.mk-grp')) return;
+      const r = e.getBoundingClientRect();
+      max = Math.max(max, Math.min(r.width, r.height));
+    });
+    return max;
+  }
+
   // backpack.tf button: top-left corner on big item cards, right of the name in lists / tables
   function bpMode(a) {
     let hasName = false;
@@ -472,7 +486,9 @@
     if (!hasName) return null;                       // icon-only link: no button on top of the icon
     const r = a.getBoundingClientRect();
     if (!r.width || !r.height) return 'wait';        // hidden for now
-    if (hasImg && r.width >= 110 && r.height >= 110) return 'overlay';
+    // A big card = a big PICTURE. The size of the whole link must not decide: in a list row it grows when the buttons
+    // narrow the name (more lines), which used to flip the buttons between "over the name" and "next to it" forever.
+    if (hasImg && r.width >= 110 && imageSize(a) >= 80) return 'overlay';
     // another link to the same item right next to it already carries the name -> only one button
     const href = a.getAttribute('href');
     let box = a.parentElement;
