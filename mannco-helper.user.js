@@ -2,8 +2,8 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.17
-// @description  Mannco.store helper for TF2: prices in keys (editable key price, optional ref) and backpack.tf buttons (stats with unusual effect, item history).
+// @version      1.24
+// @description  Mannco.store helper for TF2: prices in keys (editable key price, optional ref), backpack.tf buttons (stats with unusual effect, item history) and Steam Community Market buttons.
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
 // @updateURL    https://raw.githubusercontent.com/KozakNewton/mannco-helper/main/mannco-helper.user.js
@@ -51,69 +51,60 @@
     }
     .mk-keys .mk-r { color: #9ca3af; }
     .mk-keys .mk-k + .mk-r { margin-left: 4px; }
-    /* narrow side panels / scrollable lists: small chip under the price instead of next to it,
-       so it never makes the surrounding tiles, rows or buttons wider */
-    .mk-keys.mk-compact {
+    /* the item menu on the left (seller inventory) and the deposit list: the chip always sits UNDER the usd price,
+       so a long price never makes the tiles / rows wider (the panel just gets a bit taller) */
+    .mk-keys.mk-below {
       display: block;
+      grid-column: 1 / -1;
       width: fit-content;
       max-width: 100%;
       margin: 2px 0 0 0;
       padding: 0 5px;
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.5;
-      white-space: normal;
-    }
-    /* price sits in a flex/grid row (a block chip would still sit next to it) -> small chip with a tiny gap */
-    .mk-keys.mk-compact.mk-row {
-      display: inline-block;
-      margin: 0 0 0 4px;
-      align-self: center;
       white-space: nowrap;
     }
-    .mk-bp {
-      position: absolute;
-      top: 6px;
-      left: 6px;
-      z-index: 5;
-      padding: 1px 6px;
-      background: rgba(20, 20, 26, 0.85);
-      border: 1px solid #5a8dee;
+    .mk-col { flex-direction: column !important; align-items: flex-start !important; flex-wrap: nowrap !important; }
+    /* everywhere else the chip sits right behind the price, even when the price lives in a column / grid */
+    .mk-nw { white-space: nowrap !important; flex-wrap: nowrap !important; overflow: visible !important; }
+    .mk-pw { display: inline-flex; align-items: baseline; max-width: 100%; white-space: nowrap; }
+    /* backpack.tf button (colours taken from the backpack.tf logo: slate blue-grey, white lettering) */
+    .mk-bp, .mk-bp-inline {
+      background: linear-gradient(180deg, #6f8ba8 0%, #526f8c 100%);
+      border: 1px solid #3f5871;
       border-radius: 4px;
-      color: #5a8dee;
-      font-size: 0.8em;
+      color: #fff;
+      font-weight: 700;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+      cursor: pointer;
+      user-select: none;
+    }
+    .mk-bp:hover, .mk-bp-inline:hover { background: linear-gradient(180deg, #829eba 0%, #648199 100%); color: #fff; }
+    .mk-bp { padding: 1px 6px; font-size: 0.8em; }
+    .mk-bp-inline { display: inline-block; margin-left: 10px; padding: 1px 8px; vertical-align: middle; font-size: 14px; line-height: 1.4; }
+
+    /* Steam Community Market button (colours taken from the Steam logo: dark navy -> blue) */
+    .mk-scm, .mk-scm-inline {
+      background: linear-gradient(180deg, #0f2347 0%, #2d6aa8 100%);
+      border: 1px solid #5ba3dc;
+      border-radius: 4px;
+      color: #fff;
       font-weight: 700;
       cursor: pointer;
       user-select: none;
     }
-    .mk-bp:hover { background: #5a8dee; color: #fff; }
-    .mk-bp.mk-bp-side {
-      position: static;
-      display: inline-block;
-      margin-left: 8px;
-      vertical-align: middle;
-      flex: none;
-      align-self: center;   /* inside a flex row: keep the natural height instead of stretching to the row */
-      height: auto;
-      line-height: 1.4;
-      font-size: 0.8em;
-    }
-    .mk-bp-inline {
-      display: inline-block;
-      margin-left: 10px;
-      padding: 1px 8px;
-      vertical-align: middle;
-      background: rgba(20, 20, 26, 0.85);
-      border: 1px solid #5a8dee;
-      border-radius: 4px;
-      color: #5a8dee;
-      font-size: 14px;
-      font-weight: 700;
-      line-height: 1.4;
-      cursor: pointer;
-      user-select: none;
-    }
-    .mk-bp-inline:hover { background: #5a8dee; color: #fff; }
-    .mk-bp-float { position: fixed; top: 96px; left: 12px; z-index: 2147483000; margin: 0; }
+    .mk-scm:hover, .mk-scm-inline:hover { background: linear-gradient(180deg, #1b3a70 0%, #4a90d0 100%); }
+    .mk-scm { padding: 1px 6px; font-size: 0.8em; }
+    .mk-scm-inline { padding: 1px 8px; font-size: 14px; line-height: 1.4; vertical-align: middle; }
+
+    /* BP + SCM sit side by side in one group: top-left corner of big cards, right of the name in lists */
+    .mk-grp { position: absolute; top: 6px; left: 6px; z-index: 5; display: inline-flex; gap: 4px; align-items: stretch; }
+    .mk-grp.mk-grp-side { position: static; margin-left: 8px; vertical-align: middle; flex: none; align-self: center; height: auto; line-height: 1.4; }
+    .mk-grp .mk-bp, .mk-grp .mk-scm { position: static; margin: 0; display: inline-block; line-height: 1.4; }
+    /* the same pair next to the heading on the item page (or floating in the corner when there is no heading) */
+    .mk-pgrp { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; align-items: stretch; }
+    .mk-pgrp .mk-bp-inline, .mk-pgrp .mk-scm-inline { margin: 0; }
+    .mk-pgrp-float { position: fixed; top: 96px; left: 12px; z-index: 2147483000; margin: 0; }
   `;
   document.documentElement.appendChild(style);
 
@@ -255,52 +246,104 @@
     document.querySelectorAll('.mk-keys').forEach((el) => render(el, parseFloat(el.dataset.usd)));
   }
 
-  // ---------- compact chips in narrow panels ----------
-  // Detected from the layout itself: a chip is made compact when one of its (narrow, <= 720 px) ancestors
-  // does not fit its content horizontally (scrollWidth > clientWidth), or is a scrollable / fixed / sticky box.
-  // That is the seller-inventory item menu, the deposit list, drawers ... The chip must not widen anything there.
-  // Once a chip is compact it stays compact (no flipping back and forth). Reads first, writes after.
-  const COMPACT_MAX_WIDTH = 720;
-  function updateCompact() {
-    const badges = Array.from(document.querySelectorAll('.mk-keys'));
-    if (!badges.length) return;
-    const panelCache = new Map();
-    const flexCache = new Map();
-    const isPanel = (el) => {
-      let v = panelCache.get(el);
-      if (v === undefined) {
-        v = false;
-        const w = el.clientWidth;
-        if (w > 0 && w <= COMPACT_MAX_WIDTH) {
-          const cs = getComputedStyle(el);
-          const scrolls = /auto|scroll/.test(cs.getPropertyValue('overflow-x')) || /auto|scroll/.test(cs.getPropertyValue('overflow-y'));
-          const pos = cs.getPropertyValue('position');
-          v = scrolls || pos === 'fixed' || pos === 'sticky' || el.scrollWidth > w + 1;
-        }
-        panelCache.set(el, v);
+  // ---------- chip placement ----------
+  // 1) The left item menu (seller inventory: "Predefined prices") and the deposit list ("N items to deposit") are
+  //    found by their heading. Inside them every chip goes under the usd price.
+  // 2) Everywhere else the chip stays right behind the price. If the price sits in a column / grid (which would put
+  //    the chip below it), price + chip are wrapped together into one inline-flex box.
+  const PANEL_HEAD = /^(?:predefined prices|\d+\s*items?\s+to\s+deposit)$/i;
+  const PANEL_MAX_WIDTH = 720;
+  const SELL_BTN = /^(?:sell|withdraw|clear)$/i;
+
+  function hasActionButton(el) {
+    const bs = el.querySelectorAll('button, [role="button"], a');
+    for (const b of bs) if (SELL_BTN.test((b.textContent || '').trim())) return true;
+    return false;
+  }
+
+  // The footer block "Popular on Mannco.store" links to items, but BP / SCM buttons there only get in the way.
+  const SKIP_HEAD = /^popular on mannco\.store$/i;
+  function skipZoneOf(h) {
+    // smallest ancestor of the heading that holds the whole link block (a handful of links)
+    let el = h;
+    for (let i = 0; i < 8 && el && el !== document.body && el !== document.documentElement; i++, el = el.parentElement) {
+      if (el.querySelectorAll('a[href]').length >= 8) return el;
+    }
+    return h && h.parentElement;
+  }
+
+  function markPanels() {
+    const found = new Set();
+    const skip = new Set();
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      const v = n.nodeValue;
+      if (v.length < 10 || v.length > 48) continue;
+      const tt = v.trim();
+      if (SKIP_HEAD.test(tt)) { const z = skipZoneOf(n.parentElement); if (z) skip.add(z); continue; }
+      if (!PANEL_HEAD.test(tt)) continue;
+      // the panel = smallest ancestor that also holds the Sell / Withdraw / Clear buttons (but never a wide page area)
+      let best = null;
+      let el = n.parentElement;
+      for (let i = 0; i < 14 && el && el !== document.body && el !== document.documentElement; i++, el = el.parentElement) {
+        if (el.getBoundingClientRect().width > PANEL_MAX_WIDTH) break;
+        best = el;
+        if (hasActionButton(el)) break;
       }
-      return v;
-    };
-    const inFlexRow = (p) => {
-      let v = flexCache.get(p);
-      if (v === undefined) {
+      if (best) found.add(best);
+    }
+    document.querySelectorAll('[data-mk-skip]').forEach((e) => { if (!skip.has(e)) e.removeAttribute('data-mk-skip'); });
+    skip.forEach((e) => { if (e.getAttribute('data-mk-skip') !== '1') e.setAttribute('data-mk-skip', '1'); });
+    document.querySelectorAll('[data-mk-panel]').forEach((e) => { if (!found.has(e)) e.removeAttribute('data-mk-panel'); });
+    found.forEach((e) => { if (e.getAttribute('data-mk-panel') !== '1') e.setAttribute('data-mk-panel', '1'); });
+  }
+
+  const PRICE_ONLY = /^(?:US)?\$\s*[\d,]+(?:\.\d{1,2})?$/;
+
+  function wrapPriceAndChip(p, chip) {
+    const prev = chip.previousSibling;
+    if (!prev) return;
+    const wrap = document.createElement('span');
+    wrap.className = 'mk-pw';
+    p.insertBefore(wrap, prev);
+    wrap.appendChild(prev);
+    wrap.appendChild(chip);
+  }
+
+  function layoutChips() {
+    const chips = Array.from(document.querySelectorAll('.mk-keys'));
+    const info = chips.map((chip) => {
+      const p = chip.parentElement;
+      let kind = 'block';
+      if (p) {
         const cs = getComputedStyle(p);
-        v = /flex|grid/.test(cs.getPropertyValue('display')) && !/column/.test(cs.getPropertyValue('flex-direction') || '');
-        flexCache.set(p, v);
+        const d = cs.getPropertyValue('display');
+        if (/flex/.test(d)) kind = /column/.test(cs.getPropertyValue('flex-direction')) ? 'col' : 'row';
+        else if (/grid/.test(d)) kind = 'grid';
       }
-      return v;
-    };
-    const plan = badges.map((b) => {
-      let compact = b.dataset.mkc === '1';
-      for (let el = b.parentElement; !compact && el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
-        if (isPanel(el)) compact = true;
-      }
-      return [b, compact, compact && !!b.parentElement && inFlexRow(b.parentElement)];
+      return { chip, p, kind, inPanel: !!chip.closest('[data-mk-panel]') };
     });
-    plan.forEach(([b, compact, row]) => {
-      if (compact && b.dataset.mkc !== '1') b.dataset.mkc = '1';
-      if (b.classList.contains('mk-compact') !== compact) b.classList.toggle('mk-compact', compact);
-      if (b.classList.contains('mk-row') !== row) b.classList.toggle('mk-row', row);
+    info.forEach(({ chip, p, kind, inPanel }) => {
+      if (chip.classList.contains('mk-below') !== inPanel) chip.classList.toggle('mk-below', inPanel);
+      if (!p) return;
+      if (inPanel) {
+        // price + chip in a row (flex/grid): turn that little row into a column so the chip drops below the price
+        if (kind === 'row' && !p.classList.contains('mk-col')) p.classList.add('mk-col');
+      } else if (p.classList.contains('mk-pw')) {
+        // already wrapped: price + chip can never be split
+      } else if ((kind === 'col' || kind === 'grid') && chip.previousSibling) {
+        wrapPriceAndChip(p, chip);
+      } else if (!p.classList.contains('mk-nw')) {
+        // the chip must stay on the price's line even in a narrow column (it used to drop below the price when
+        // "$8.55 + chip" was a few pixels wider than the cell): no line break between them
+        const rest = Array.from(p.childNodes).filter((x) => x !== chip).map((x) => x.textContent).join('').trim();
+        if (PRICE_ONLY.test(rest)) p.classList.add('mk-nw');          // the parent holds nothing but the price
+        else if (chip.previousSibling) wrapPriceAndChip(p, chip);     // other content around -> keep just price + chip together
+      }
+    });
+    document.querySelectorAll('.mk-col').forEach((e) => {
+      if (!e.querySelector(':scope > .mk-keys.mk-below')) e.classList.remove('mk-col');
     });
   }
 
@@ -330,7 +373,7 @@
       const t = n.nodeValue.trim();
       if (!t || t.length > 60) continue;
       const el = n.parentElement;
-      if (!el || el.closest('.mk-keys, .mk-bp, script, style, nav, header, footer')) continue;
+      if (!el || el.closest('.mk-keys, .mk-bp, .mk-grp, .mk-pgrp, script, style, nav, header, footer')) continue;
       const a = el.closest('a');
       const isHeading = el.closest('h1,h2,h3,h4,h5,h6,[role="heading"]') ||
         (a && /^(?:https?:\/\/[^/]+)?\/(?:cs2|csgo|tf2|rust|dota)\/?$/i.test(a.getAttribute('href') || ''));
@@ -447,8 +490,10 @@
   }
 
   function ensureBp(card) {
+    const old = Array.from(card.children).find((c) => c.classList && c.classList.contains('mk-grp'));
+    // no buttons in the page footer ("Popular on Mannco.store" ...)
+    if (card.closest('footer, [data-mk-skip]')) { if (old) old.remove(); return; }
     const mode = bpMode(card);
-    const old = Array.from(card.children).find((c) => c.classList && c.classList.contains('mk-bp'));
     if (mode === 'wait') return;
     if (!mode) { if (old) old.remove(); return; }
     if (old) {
@@ -456,9 +501,12 @@
       old.remove();
     }
     if (mode === 'overlay' && getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    const grp = document.createElement('span');
+    grp.className = 'mk-grp' + (mode === 'side' ? ' mk-grp-side' : '');
+    grp.dataset.mode = mode;
+
     const bp = document.createElement('span');
-    bp.className = 'mk-bp' + (mode === 'side' ? ' mk-bp-side' : '');
-    bp.dataset.mode = mode;
+    bp.className = 'mk-bp';
     bp.textContent = 'BP';
     bp.title = 'Open on backpack.tf';
     bp.addEventListener('click', (e) => {
@@ -469,7 +517,22 @@
       console.log('[mannco-keys] BP click:', parseCard(card), '->', url);
       if (url) window.open(url, '_blank', 'noopener');
     });
-    card.appendChild(bp);
+
+    const scm = document.createElement('span');
+    scm.className = 'mk-scm';
+    scm.textContent = 'SCM';
+    scm.title = 'Open on Steam Community Market';
+    scm.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = buildScmUrl(card);
+      console.log('[mannco-keys] SCM click:', parseCard(card), '->', url);
+      if (url) window.open(url, '_blank', 'noopener');
+    });
+
+    grp.appendChild(bp);
+    grp.appendChild(scm);
+    card.appendChild(grp);
   }
 
   // ---------- backpack.tf ----------
@@ -511,7 +574,7 @@
     const w = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
     let n;
     while ((n = w.nextNode())) {
-      if (n.parentElement.closest('.mk-keys, .mk-bp, .mk-bp-inline, .mk-hist, script, style')) continue;
+      if (n.parentElement.closest('.mk-keys, .mk-bp, .mk-grp, .mk-pgrp, .mk-bp-inline, .mk-scm-inline, .mk-hist, script, style')) continue;
       const t = normText(n.nodeValue);
       if (t) out.push(t);
     }
@@ -675,6 +738,36 @@
     return url;
   }
 
+  // ---------- Steam Community Market ----------
+  // Opens the exact listing page: https://steamcommunity.com/market/listings/440/<market name>
+  // Mannco uses the Steam names, so the name is taken as it is; only the differences are corrected:
+  //  - the effect is not part of the market name of an unusual ("Unusual Brand Loyalist") -> it is added as
+  //    ?filter=<effect>, so the listing shows just that effect
+  //  - Mannco's "Ubersaw" is "Übersaw" on Steam
+  //  - "Uncraftable" and Mannco's "(Team Shine, Hot Rod)" after a killstreak kit are not part of the market name
+  //  - spellings Mannco gets wrong (see NAME_FIXES), also behind a quality prefix ("Strange Head of Defense")
+  const WEAR_NAMES = {
+    'factory new': 'Factory New', 'minimal wear': 'Minimal Wear', 'field-tested': 'Field-Tested',
+    'well-worn': 'Well-Worn', 'battle scarred': 'Battle Scarred',
+  };
+  function buildScmUrl(card) {
+    const info = parseCard(card);
+    if (!info.name) return null;
+    // "Uncraftable" is a Mannco / backpack.tf thing: the market lists kits and everything else without it
+    let name = info.name.replace(/^Uncraftable\s+/i, '').replace(/^(.*\bKit(?: Fabricator)?)\s*\([^)]*\)\s*$/i, '$1');
+    name = name.replace(/\bUbersaw\b/g, '\u00dcbersaw');   // Steam spells it with the umlaut, Mannco without
+    // weapon skins: "<Skin> <Weapon> (Wear)" -> the wear in the exact Steam spelling
+    name = name.replace(WEAR_RE, (m, wear) => ' (' + WEAR_NAMES[wear.toLowerCase()] + ')');
+    const words = name.split(' ');
+    for (let k = 1; k <= Math.min(6, words.length); k++) {
+      const fixed = NAME_FIXES[nameKey(words.slice(-k).join(' '))];
+      if (fixed) { name = words.slice(0, -k).concat(fixed).join(' '); break; }
+    }
+    let url = 'https://steamcommunity.com/market/listings/440/' + encodeURIComponent(name);
+    if (info.effect && /(?:^|\s)Unusual\s/.test(name)) url += '?filter=' + encodeURIComponent(info.effect);
+    return url;
+  }
+
   // ---------- BP button on the item page itself (/item/440-...) ----------
   const alnum = (str) => String(str).toLowerCase().replace(/[^a-z0-9]+/g, '');
 
@@ -703,28 +796,49 @@
   function ensurePageBp() {
     const m = /^\/item\/440-([^/?#]+)/.exec(location.pathname);
     if (!m) {
-      document.querySelectorAll('.mk-bp-inline').forEach((b) => b.remove());
+      document.querySelectorAll('.mk-pgrp').forEach((b) => b.remove());
       return;
     }
     const head = findPageTitleEl(m[1]);
-    if (head ? head.querySelector(':scope > .mk-bp-inline') : document.querySelector('.mk-bp-float')) return;
-    document.querySelectorAll('.mk-bp-inline').forEach((b) => b.remove());   // stale copy from a previous page
+    if (head ? head.querySelector(':scope > .mk-pgrp') : document.querySelector('.mk-pgrp-float')) return;
+    document.querySelectorAll('.mk-pgrp').forEach((b) => b.remove());   // stale copy from a previous page
+
+    const grp = document.createElement('span');
+    grp.className = 'mk-pgrp' + (head ? '' : ' mk-pgrp-float');
+    const pageUrl = (build) => {
+      const text = head ? headText(head) : cleanTitle(document.title);
+      const tmp = document.createElement('div');
+      tmp.textContent = text;
+      return [text, build(tmp, m[1])];
+    };
 
     const bp = document.createElement('span');
-    bp.className = 'mk-bp-inline' + (head ? '' : ' mk-bp-float');
+    bp.className = 'mk-bp-inline';
     bp.textContent = 'BP';
     bp.title = 'Open on backpack.tf';
     bp.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const text = head ? headText(head) : cleanTitle(document.title);
-      const tmp = document.createElement('div');
-      tmp.textContent = text;
-      const url = buildBackpackUrl(tmp, m[1]);
+      const [text, url] = pageUrl(buildBackpackUrl);
       console.log('[mannco-keys] BP click (item page):', text, '->', url);
       if (url) window.open(url, '_blank', 'noopener');
     });
-    (head || document.body).appendChild(bp);
+
+    const scm = document.createElement('span');
+    scm.className = 'mk-scm-inline';
+    scm.textContent = 'SCM';
+    scm.title = 'Open on Steam Community Market';
+    scm.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const [text, url] = pageUrl((tmp) => buildScmUrl(tmp));
+      console.log('[mannco-keys] SCM click (item page):', text, '->', url);
+      if (url) window.open(url, '_blank', 'noopener');
+    });
+
+    grp.appendChild(bp);
+    grp.appendChild(scm);
+    (head || document.body).appendChild(grp);
   }
 
   // ---------- backpack.tf item history button (Items list on item pages) ----------
@@ -868,6 +982,7 @@
     ensurePanel();
     observer.disconnect();
     try {
+      markPanels();
       homeHeadings = isHome() ? findHomeHeadings() : [];
       document.querySelectorAll('.mk-keys').forEach((el) => {
         if (!isTf2OrUnknown(el)) el.remove();
@@ -919,14 +1034,14 @@
           }
         }
       }
-      document.querySelectorAll('.mk-bp').forEach((b) => {
-        const a = b.parentElement;
-        if (!a || !/\/item\/440-/.test(a.getAttribute('href') || '')) b.remove();
+      document.querySelectorAll('.mk-grp').forEach((g) => {
+        const a = g.parentElement;
+        if (!a || !/\/item\/440-/.test(a.getAttribute('href') || '')) g.remove();
       });
       document.querySelectorAll('a[href*="/item/440-"]').forEach(ensureBp);
       ensurePageBp();
       ensureHistoryButtons();
-      updateCompact();
+      layoutChips();
     } finally {
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     }
