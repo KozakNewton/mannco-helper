@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.25
+// @version      1.28
 // @description  Mannco.store helper for TF2: prices in keys (editable key price, optional ref), backpack.tf buttons (stats with unusual effect, item history) and Steam Community Market buttons.
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -102,8 +102,11 @@
     .mk-grp.mk-grp-side { position: static; margin-left: 8px; vertical-align: middle; flex: none; align-self: center; height: auto; line-height: 1.4; }
     .mk-grp .mk-bp, .mk-grp .mk-scm { position: static; margin: 0; display: inline-block; line-height: 1.4; }
     /* in lists / tables the pair is a bit smaller, so it takes less room from the name */
-    .mk-grp-side { gap: 3px; }
-    .mk-grp-side .mk-bp, .mk-grp-side .mk-scm { font-size: 0.72em; padding: 1px 5px; }
+    .mk-grp-side, .mk-grp-below { gap: 3px; }
+    .mk-grp-side .mk-bp, .mk-grp-side .mk-scm, .mk-grp-below .mk-bp, .mk-grp-below .mk-scm { font-size: 0.72em; padding: 1px 5px; }
+    /* under a small icon (e.g. Transactions -> Orders details): a row right below the icon, outside of it, so the icon
+       is not pushed out of its box; it floats (position: absolute), so it takes no room in the row either */
+    .mk-grp.mk-grp-below { position: absolute; top: 0; left: 0; margin: 0; z-index: 5; white-space: nowrap; }
     /* the same pair next to the heading on the item page (or floating in the corner when there is no heading) */
     .mk-pgrp { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; align-items: stretch; }
     .mk-pgrp .mk-bp-inline, .mk-pgrp .mk-scm-inline { margin: 0; }
@@ -350,8 +353,27 @@
     });
   }
 
+  // ---------- item addresses ----------
+  // regular market:  /item/440-<slug>              (440 = TF2, 730 = CS2, 252490 = Rust, 570 = Dota)
+  // P2P market:      /p2p/tf2/<id>-<slug>          (/p2p/cs2/..., /p2p/rust/..., /p2p/dota2/...)
+  const P2P_GAMES = { tf2: '440', tf: '440', cs2: '730', csgo: '730', rust: '252490', dota2: '570', dota: '570' };
+  function itemRef(href) {
+    href = String(href || '');
+    let m = /\/item\/(\d+)-([^/?#]+)/.exec(href);
+    if (m) return { game: m[1], slug: m[2], p2p: false };
+    m = /\/p2p\/([a-z0-9]+)\/\d+-([^/?#]+)/i.exec(href);
+    if (m && P2P_GAMES[m[1].toLowerCase()]) return { game: P2P_GAMES[m[1].toLowerCase()], slug: m[2], p2p: true };
+    return null;
+  }
+  const isTf2Ref = (href) => { const r = itemRef(href); return !!r && r.game === '440'; };
+  const ITEM_LINK_SEL = 'a[href*="/item/"], a[href*="/p2p/"]';
+
   // ---------- which game does a price belong to? (keys only make sense for TF2 = appid 440) ----------
   const PATH_GAMES = [
+    [/^\/p2p\/(?:tf2|tf)(?:\/|$)/, '440'],
+    [/^\/p2p\/(?:cs2|csgo)(?:\/|$)/, '730'],
+    [/^\/p2p\/rust(?:\/|$)/, '252490'],
+    [/^\/p2p\/dota(?:2)?(?:\/|$)/, '570'],
     [/^\/(?:tf2|tf)(?:\/|$)/, '440'],
     [/^\/(?:cs2|csgo)(?:\/|$)/, '730'],
     [/^\/rust(?:\/|$)/, '252490'],
@@ -403,18 +425,18 @@
     const start = node.nodeType === 1 ? node : node.parentElement;
     if (!start) return null;
     const idOf = (a) => {
-      const m = /\/item\/(\d+)-/.exec(a.getAttribute('href') || '');
-      return m ? m[1] : null;
+      const r = itemRef(a.getAttribute('href'));
+      return r ? r.game : null;
     };
-    // 1) the price sits inside an item link  (/item/440-..., /item/730-...)
-    const own = start.closest('a[href*="/item/"]');
+    // 1) the price sits inside an item link  (/item/440-..., /item/730-..., /p2p/tf2/...)
+    const own = start.closest(ITEM_LINK_SEL);
     if (own && idOf(own)) return idOf(own);
     // 2) the card contains item link(s) next to the price (all of the same game)
     let el = start;
     for (let i = 0; i < 8 && el && el !== document.body; i++) {
       if (hasMultiplePrices(el)) break;   // this is already a container of several cards
       const ids = new Set();
-      el.querySelectorAll('a[href*="/item/"]').forEach((a) => {
+      el.querySelectorAll(ITEM_LINK_SEL).forEach((a) => {
         const id = idOf(a);
         if (id) ids.add(id);
       });
@@ -431,8 +453,8 @@
       if (g) return g;
     }
     // 4) the page itself belongs to one game
-    const m = /^\/item\/(\d+)-/.exec(location.pathname);
-    if (m) return m[1];
+    const here = itemRef(location.pathname);
+    if (here) return here.game;
     for (const [re, id] of PATH_GAMES) if (re.test(location.pathname)) return id;
     return null;
   }
@@ -478,7 +500,56 @@
     return max;
   }
 
-  // backpack.tf button: top-left corner on big item cards, right of the name in lists / tables
+  // The overlay needs the link to be a positioning context (position: relative). If the link is not one yet and it holds
+  // an absolutely positioned child (an icon placed with absolute / transform), that child would jump somewhere else.
+  // Such links get the "side" buttons instead. Decided once per link.
+  const displaceCache = new WeakMap();
+  function wouldDisplace(a) {
+    if (displaceCache.has(a)) return displaceCache.get(a);
+    let res = false;
+    if (getComputedStyle(a).position === 'static') {
+      for (const d of a.querySelectorAll('*')) {
+        if (d.closest('.mk-grp')) continue;
+        if (getComputedStyle(d).position !== 'absolute') continue;
+        let p = d.parentElement;
+        let positioned = false;
+        while (p && p !== a) {
+          if (getComputedStyle(p).position !== 'static') { positioned = true; break; }
+          p = p.parentElement;
+        }
+        if (!positioned) { res = true; break; }   // its containing block would change from "above the link" to the link
+      }
+    }
+    displaceCache.set(a, res);
+    return res;
+  }
+
+  // does the link hold any text of its own (name, ...)? Prices / quantities and our own elements do not count.
+  function hasOwnText(a) {
+    const w = document.createTreeWalker(a, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      if (n.parentElement.closest('.mk-keys, .mk-grp, .mk-pgrp, script, style')) continue;
+      const t = normText(n.nodeValue);
+      if (t && !UI_TEXT.test(t)) return true;
+    }
+    return false;
+  }
+
+  // another link to the same item next to this one that carries the name as text
+  function hasTwinWithText(a) {
+    const href = a.getAttribute('href');
+    let box = a.parentElement;
+    for (let i = 0; i < 4 && box; i++, box = box.parentElement) {
+      for (const t of box.querySelectorAll('a[href]')) {
+        if (t !== a && t.getAttribute('href') === href && hasOwnText(t)) return true;
+      }
+    }
+    return false;
+  }
+
+  // backpack.tf button: top-left corner on big item cards, right of the name in lists / tables,
+  // under the icon for icon-only links
   function bpMode(a) {
     let hasName = false;
     try { hasName = !!parseCard(a).name; } catch (e) { /* ignore */ }
@@ -488,7 +559,14 @@
     if (!r.width || !r.height) return 'wait';        // hidden for now
     // A big card = a big PICTURE. The size of the whole link must not decide: in a list row it grows when the buttons
     // narrow the name (more lines), which used to flip the buttons between "over the name" and "next to it" forever.
-    if (hasImg && r.width >= 110 && imageSize(a) >= 80) return 'overlay';
+    // (and the picture must be most of the card: a small icon next to a long name in a wide row is a list row, not a card)
+    const img = hasImg ? imageSize(a) : 0;
+    if (hasImg && r.width >= 110 && img >= 80 && img >= r.width * 0.35 && !wouldDisplace(a)) return 'overlay';
+    if (hasImg && img < 80 && !hasOwnText(a)) {
+      // icon-only link (the name comes just from the picture's alt). A link with the name as text next to it takes the
+      // buttons; otherwise they go in a row UNDER the icon, not inside it (inside they push the icon out of its box)
+      return hasTwinWithText(a) ? null : 'below';
+    }
     // another link to the same item right next to it already carries the name -> only one button
     const href = a.getAttribute('href');
     let box = a.parentElement;
@@ -496,29 +574,72 @@
       const twins = Array.from(box.querySelectorAll('a[href]')).filter((x) => x !== a && x.getAttribute('href') === href);
       for (const t of twins) {
         if (a.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_PRECEDING) {
-          let tn = false;
-          try { tn = !!parseCard(t).name; } catch (e) { /* ignore */ }
-          if (tn) return null;
+          if (hasOwnText(t)) return null;
         }
       }
     }
     return 'side';
   }
 
+  // The P2P item page shows the effect apart from the name ("★ Miami Nights" / "Unusual Hawk Warrior"), and the rows
+  // of its "Player listings" only carry the name. For links to the very same item the effect is taken from the page.
+  function pageEffectText() {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      const p = n.parentElement;
+      if (!p || p.closest('nav, header, footer, script, style, .mk-keys, .mk-grp, .mk-pgrp')) continue;
+      const t = normText(n.nodeValue);
+      const i = t.indexOf('★');
+      if (i === -1 || t.length > 90) continue;
+      const post = t.slice(i + 1).trim();
+      if (!post) continue;
+      const sp = splitEffect(post);
+      if (EFFECT_IDS[normEffect(sp.effect)]) return sp.effect;
+    }
+    return null;
+  }
+
+  function withPageEffect(card, ref) {
+    const here = itemRef(location.pathname);
+    if (!here || !here.p2p || !ref || ref.slug !== here.slug) return card;
+    let info;
+    try { info = parseCard(card); } catch (e) { return card; }
+    if (!info.name || info.effect || !/(?:^|\s)Unusual\s/.test(info.name)) return card;
+    const eff = pageEffectText();
+    if (!eff) return card;
+    const tmp = document.createElement('div');
+    tmp.textContent = '★ ' + eff + ' ' + info.name;
+    return tmp;
+  }
+
+  // a "below" group is a sibling right after the link (it must not be inside the icon)
+  function placeBelow(grp, a) {
+    const top = (a.offsetTop + a.offsetHeight + 2) + 'px';
+    const left = a.offsetLeft + 'px';
+    if (grp.style.top !== top) grp.style.top = top;
+    if (grp.style.left !== left) grp.style.left = left;
+  }
+
   function ensureBp(card) {
-    const old = Array.from(card.children).find((c) => c.classList && c.classList.contains('mk-grp'));
+    const sib = card.nextElementSibling;
+    const old = Array.from(card.children).find((c) => c.classList && c.classList.contains('mk-grp')) ||
+      (sib && sib.classList.contains('mk-grp') && sib.__mkAnchor === card ? sib : null);
     // no buttons in the page footer ("Popular on Mannco.store" ...)
-    if (card.closest('footer, [data-mk-skip]')) { if (old) old.remove(); return; }
+    if (card.closest('footer, [data-mk-skip]')) { if (old) old.remove(); return; }   // (also covers the "below" sibling)
     const mode = bpMode(card);
     if (mode === 'wait') return;
     if (!mode) { if (old) old.remove(); return; }
     if (old) {
-      if (old.dataset.mode === mode) return;
+      if (old.dataset.mode === mode) {
+        if (mode === 'below') placeBelow(old, card);   // follow the icon if the layout moved
+        return;
+      }
       old.remove();
     }
     if (mode === 'overlay' && getComputedStyle(card).position === 'static') card.style.position = 'relative';
     const grp = document.createElement('span');
-    grp.className = 'mk-grp' + (mode === 'side' ? ' mk-grp-side' : '');
+    grp.className = 'mk-grp' + (mode === 'side' ? ' mk-grp-side' : '') + (mode === 'below' ? ' mk-grp-below' : '');
     grp.dataset.mode = mode;
 
     const bp = document.createElement('span');
@@ -528,8 +649,8 @@
     bp.addEventListener('click', (e) => {
       e.preventDefault();   // the card itself is a link to Mannco
       e.stopPropagation();
-      const slugM = /\/item\/440-([^/?#]+)/.exec(card.getAttribute('href') || '');
-      const url = buildBackpackUrl(card, slugM && slugM[1]);
+      const ref = itemRef(card.getAttribute('href'));
+      const url = buildBackpackUrl(withPageEffect(card, ref), ref && ref.slug);
       console.log('[mannco-keys] BP click:', parseCard(card), '->', url);
       if (url) window.open(url, '_blank', 'noopener');
     });
@@ -541,14 +662,20 @@
     scm.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const url = buildScmUrl(card);
+      const url = buildScmUrl(withPageEffect(card, itemRef(card.getAttribute('href'))));
       console.log('[mannco-keys] SCM click:', parseCard(card), '->', url);
       if (url) window.open(url, '_blank', 'noopener');
     });
 
     grp.appendChild(bp);
     grp.appendChild(scm);
-    card.appendChild(grp);
+    if (mode === 'below') {
+      grp.__mkAnchor = card;
+      card.insertAdjacentElement('afterend', grp);
+      placeBelow(grp, card);
+    } else {
+      card.appendChild(grp);
+    }
   }
 
   // ---------- backpack.tf ----------
@@ -810,11 +937,12 @@
   }
 
   function ensurePageBp() {
-    const m = /^\/item\/440-([^/?#]+)/.exec(location.pathname);
-    if (!m) {
+    const ref = itemRef(location.pathname);
+    if (!ref || ref.game !== '440') {
       document.querySelectorAll('.mk-pgrp').forEach((b) => b.remove());
       return;
     }
+    const m = [null, ref.slug];
     const head = findPageTitleEl(m[1]);
     if (head ? head.querySelector(':scope > .mk-pgrp') : document.querySelector('.mk-pgrp-float')) return;
     document.querySelectorAll('.mk-pgrp').forEach((b) => b.remove());   // stale copy from a previous page
@@ -822,7 +950,11 @@
     const grp = document.createElement('span');
     grp.className = 'mk-pgrp' + (head ? '' : ' mk-pgrp-float');
     const pageUrl = (build) => {
-      const text = head ? headText(head) : cleanTitle(document.title);
+      let text = head ? headText(head) : cleanTitle(document.title);
+      if (ref.p2p && !text.includes('\u2605') && /(?:^|\s)Unusual\s/.test(text)) {
+        const eff = pageEffectText();
+        if (eff) text = '\u2605 ' + eff + ' ' + text;
+      }
       const tmp = document.createElement('div');
       tmp.textContent = text;
       return [text, build(tmp, m[1])];
@@ -880,18 +1012,19 @@
     return null;
   }
 
-  // text nodes "View on Steam" -> outermost element that contains just that text (= the button)
+  // text nodes "View on Steam" (regular market) / "In Steam" (P2P) -> outermost element holding just that text (= the button)
+  const VIEW_LABEL = /^(?:view on steam|in steam)$/i;
   function findViewButtons(scope) {
     const out = [];
     const w = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     let n;
     while ((n = w.nextNode())) {
-      if (n.nodeValue.trim().toLowerCase() !== 'view on steam') continue;
+      if (!VIEW_LABEL.test(n.nodeValue.trim())) continue;
       let el = n.parentElement;
       if (!el || el.closest('.mk-hist')) continue;
       while (
         el.parentElement && el.parentElement !== document.body &&
-        el.parentElement.textContent.trim().toLowerCase() === 'view on steam'
+        VIEW_LABEL.test(el.parentElement.textContent.trim())
       ) el = el.parentElement;
       out.push(el);
     }
@@ -942,8 +1075,8 @@
   }
 
   function ensureHistoryButtons() {
-    // only on TF2 item pages (/item/440-...), nowhere else (trades, inventory, other games)
-    if (!/^\/item\/440-/.test(location.pathname)) {
+    // only on TF2 item pages (/item/440-..., /p2p/tf2/...), nowhere else (trades, inventory, other games)
+    if (!isTf2Ref(location.pathname)) {
       document.querySelectorAll('.mk-hist').forEach((b) => b.remove());
       return;
     }
@@ -963,7 +1096,7 @@
       const w = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
       let t;
       while ((t = w.nextNode())) {
-        if (t.nodeValue.trim().toLowerCase() === 'view on steam') {
+        if (VIEW_LABEL.test(t.nodeValue.trim())) {
           t.nodeValue = 'BP History';
           clone.__mkLabel = t;
           break;
@@ -1051,10 +1184,11 @@
         }
       }
       document.querySelectorAll('.mk-grp').forEach((g) => {
-        const a = g.parentElement;
-        if (!a || !/\/item\/440-/.test(a.getAttribute('href') || '')) g.remove();
+        const below = !!g.__mkAnchor;
+        const a = below ? g.__mkAnchor : g.parentElement;
+        if (!a || !a.isConnected || !isTf2Ref(a.getAttribute('href')) || (below && g.previousElementSibling !== a)) g.remove();
       });
-      document.querySelectorAll('a[href*="/item/440-"]').forEach(ensureBp);
+      document.querySelectorAll(ITEM_LINK_SEL).forEach((a) => { if (isTf2Ref(a.getAttribute('href'))) ensureBp(a); });
       ensurePageBp();
       ensureHistoryButtons();
       layoutChips();
