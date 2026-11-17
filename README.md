@@ -2,11 +2,11 @@
 
 Tampermonkey userscript for [mannco.store](https://mannco.store) (Team Fortress 2 only).
 
-- Shows every USD price in **TF2 keys** next to the dollar price.
-- Panel in the bottom-right corner to set the current key price (saved in the browser).
+- Shows every USD price in **TF2 keys** next to the dollar price
+- Panel in the bottom-right corner to set the current key price (saved in the browser)
 - **BP/SCM** button on every TF2 item card, opens the item's backpack.tf/steam stats page
-  (including the exact unusual effect, skin wear, killstreak kits).
-- **BP History** button in the *Items list* of an item page, opens `backpack.tf/item/<id>`.
+- **BP History** button in the *Items list* of an item page, opens `backpack.tf/item/<id>`
+- **Owner** button under each listings price revealing the items expected owner
 
 ## Install
 
