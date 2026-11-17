@@ -2,7 +2,7 @@
 // @name         Mannco Helper
 // @namespace    https://mannco.store/
 // @author       KozakNewton
-// @version      1.28
+// @version      1.31
 // @description  Mannco.store helper for TF2: prices in keys (editable key price, optional ref), backpack.tf buttons (stats with unusual effect, item history) and Steam Community Market buttons.
 // @homepageURL  https://github.com/KozakNewton/mannco-helper
 // @supportURL   https://github.com/KozakNewton/mannco-helper/issues
@@ -13,6 +13,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
+// @grant        GM_xmlhttpRequest
+// @connect      backpack.tf
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -102,6 +104,12 @@
     .mk-grp.mk-grp-side { position: static; margin-left: 8px; vertical-align: middle; flex: none; align-self: center; height: auto; line-height: 1.4; }
     .mk-grp .mk-bp, .mk-grp .mk-scm { position: static; margin: 0; display: inline-block; line-height: 1.4; }
     /* in lists / tables the pair is a bit smaller, so it takes less room from the name */
+    /* Owner button result (under the price) */
+    .mk-owner-res { display: block; line-height: 1.3; margin-top: 4px; white-space: nowrap; opacity: 0.95; }
+    .mk-owner.mk-under { display: flex !important; width: fit-content; margin-top: 4px; }
+    .mk-owner.mk-hide { display: none !important; }
+    .mk-owner-res a { color: #6cb4ff; text-decoration: underline; }
+    .mk-owner-res.mk-owner-unk, .mk-owner-res.mk-owner-err, .mk-owner-res.mk-owner-load { opacity: 0.7; font-style: italic; }
     .mk-grp-side, .mk-grp-below { gap: 3px; }
     .mk-grp-side .mk-bp, .mk-grp-side .mk-scm, .mk-grp-below .mk-bp, .mk-grp-below .mk-scm { font-size: 0.72em; padding: 1px 5px; }
     /* under a small icon (e.g. Transactions -> Orders details): a row right below the icon, outside of it, so the icon
@@ -717,7 +725,7 @@
     const w = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
     let n;
     while ((n = w.nextNode())) {
-      if (n.parentElement.closest('.mk-keys, .mk-bp, .mk-grp, .mk-pgrp, .mk-bp-inline, .mk-scm-inline, .mk-hist, script, style')) continue;
+      if (n.parentElement.closest('.mk-keys, .mk-bp, .mk-grp, .mk-pgrp, .mk-bp-inline, .mk-scm-inline, .mk-hist, .mk-owner, .mk-owner-res, script, style')) continue;
       const t = normText(n.nodeValue);
       if (t) out.push(t);
     }
@@ -1021,7 +1029,7 @@
     while ((n = w.nextNode())) {
       if (!VIEW_LABEL.test(n.nodeValue.trim())) continue;
       let el = n.parentElement;
-      if (!el || el.closest('.mk-hist')) continue;
+      if (!el || el.closest('.mk-hist, .mk-owner')) continue;
       while (
         el.parentElement && el.parentElement !== document.body &&
         VIEW_LABEL.test(el.parentElement.textContent.trim())
@@ -1054,13 +1062,20 @@
     });
   }
 
-  async function openHistory(histBtn) {
-    const row = rowOf(histBtn);
+  async function assetIdOf(btn) {
+    const row = rowOf(btn);
     let id = extractId(row.outerHTML);
     if (!id) {
       const orig = findViewButtons(row)[0];
       if (orig && !orig.closest('a[href]')) id = extractId(await captureViaClick(orig));
     }
+    return id;
+  }
+
+  async function openHistory(histBtn) {
+    const row = rowOf(histBtn);
+    let id = extractId(row.outerHTML);          // usual case: synchronous, so the new tab opens right on the click
+    if (!id) id = await assetIdOf(histBtn);
     if (!id) {
       console.warn('[mannco-keys] could not find the item ID in this row', row);
       const label = histBtn.__mkLabel;
@@ -1074,15 +1089,214 @@
     window.open('https://backpack.tf/item/' + id, '_blank', 'noopener');
   }
 
+  // ---------- Owner button: who holds the item, from the backpack.tf history (on click only) ----------
+  const OWNER_TTL = 10 * 60 * 1000;     // cached answers stay valid for 10 minutes
+  const OWNER_GAP = 1200;               // at least this long between two requests to backpack.tf
+  const ownerCache = new Map();         // asset id -> { t, res }
+  let ownerQueue = Promise.resolve();
+  let ownerLast = 0;
+
+  // accounts that only hold items temporarily (shops / trading bots) - they are not "owners"
+  const BOT_NAME_RES = [
+    /mannco/i,                                              // MANNCO BOT #0623, Mannco | Bot #0293
+    /\bMPTF\s*Bot\s*#?\d+/i,                                // MPTF Bot 289
+    /^\s*TRADE\s*BOT\s*#?\d+\s*$/i,                         // TRADE BOT #4
+    /^\s*Unusual(?:!\s*:D|\s*#\d+|\s+V\d+|\s+\d+(?:\.\d+)?)\s*$/i,   // Unusual! :D, Unusual #2, Unusual V3, Unusual 4.0
+  ];
+  const isBotName = (name) => BOT_NAME_RES.some((re) => re.test(name));
+
+  // history page -> { state: 'ok', name, id } | { state: 'unknown' } | { state: 'error' }
+  // Topmost (= newest) holder that is not a Mannco bot.
+  function parseOwner(html) {
+    let doc;
+    try { doc = new DOMParser().parseFromString(String(html || ''), 'text/html'); } catch (e) { return { state: 'error' }; }
+    const rows = doc.querySelectorAll('table tbody tr');
+    if (!rows.length) {
+      // a real history page with an empty table = no history; anything else (challenge, login, error) = error
+      return /History for/i.test((doc.title || '')) && doc.querySelector('table') ? { state: 'unknown' } : { state: 'error' };
+    }
+    // Only the two topmost rows: the current holder is there (or a bot that holds it for a moment, with the owner right
+    // below it). Anything further down is somebody who had the item long ago, not the owner.
+    for (const tr of Array.from(rows).slice(0, 2)) {
+      const a = tr.querySelector('a.user-link');
+      if (!a) continue;
+      const name = (a.getAttribute('data-name') || a.textContent || '').trim();
+      const id = (a.getAttribute('data-id') || '').trim();
+      if (!name || isBotName(name)) continue;
+      if (!/^7656119\d{10}$/.test(id)) continue;
+      return { state: 'ok', name, id };
+    }
+    return { state: 'unknown' };
+  }
+
+  function fetchOwner(assetId) {
+    return new Promise((resolve) => {
+      if (typeof GM_xmlhttpRequest !== 'function') { resolve({ state: 'error', why: 'no GM_xmlhttpRequest' }); return; }
+      try {
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url: 'https://backpack.tf/item/' + assetId,
+          timeout: 20000,
+          onload: (r) => {
+            if (r.status === 429) return resolve({ state: 'error', why: 'rate limited, try again later' });
+            if (r.status === 403 || r.status === 503) return resolve({ state: 'error', why: 'blocked by backpack.tf' });
+            if (r.status === 404) return resolve({ state: 'unknown' });
+            if (r.status < 200 || r.status >= 300) return resolve({ state: 'error', why: 'HTTP ' + r.status });
+            resolve(parseOwner(r.responseText));
+          },
+          onerror: () => resolve({ state: 'error', why: 'request failed' }),
+          ontimeout: () => resolve({ state: 'error', why: 'timeout' }),
+        });
+      } catch (e) { resolve({ state: 'error', why: 'request failed' }); }
+    });
+  }
+
+  // one request at a time, spaced out, so several clicks do not hammer backpack.tf
+  function lookupOwner(assetId) {
+    const hit = ownerCache.get(assetId);
+    if (hit && Date.now() - hit.t < OWNER_TTL) return Promise.resolve(hit.res);
+    const job = ownerQueue.then(async () => {
+      const wait = ownerLast + OWNER_GAP - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      const res = await fetchOwner(assetId);
+      ownerLast = Date.now();
+      if (res.state !== 'error') ownerCache.set(assetId, { t: Date.now(), res });
+      return res;
+    });
+    ownerQueue = job.catch(() => {});
+    return job;
+  }
+
+  // the cell with the listing's price (the Owner button / result sits right under the price)
+  function priceHostOf(row) {
+    const w = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      if (n.parentElement.closest('.mk-keys, .mk-owner-res, .mk-hist, .mk-owner, .mk-grp, script, style')) continue;
+      if (!PRICE_RE.test(n.nodeValue)) continue;
+      return n.parentElement.closest('td, [role="cell"]') || n.parentElement;
+    }
+    return null;
+  }
+
+  // The result takes the place of the Owner button (the button is hidden while a result / "loading" is shown).
+  // On an error the button comes back (its label tells what went wrong) so the lookup can be repeated.
+  function showOwner(row, btn, res, msg) {
+    let out = btn.nextElementSibling && btn.nextElementSibling.classList.contains('mk-owner-res') ? btn.nextElementSibling : null;
+    if (res && res.state === 'error') {
+      if (out) out.remove();
+      btn.classList.remove('mk-hide');
+      const label = btn.__mkLabel;
+      if (label) {
+        label.nodeValue = 'Owner: ' + (res.why || 'error');
+        setTimeout(() => { label.nodeValue = 'Owner'; }, 4000);
+      }
+      return;
+    }
+    if (!out) {
+      out = document.createElement('span');
+      btn.insertAdjacentElement('afterend', out);
+    }
+    // same text size as the button had
+    let fs = btn.__mkFont;
+    if (!fs) { try { fs = btn.__mkFont = getComputedStyle(btn).fontSize; } catch (e) { fs = ''; } }
+    if (fs) out.style.fontSize = fs;
+    btn.classList.add('mk-hide');
+    out.className = 'mk-owner-res';
+    out.textContent = '';
+    if (msg) { out.classList.add('mk-owner-load'); out.textContent = msg; return; }
+    if (res.state === 'ok') {
+      out.appendChild(document.createTextNode('owner: '));
+      const a = document.createElement('a');
+      a.href = 'https://steamcommunity.com/profiles/' + res.id;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = res.name;
+      a.title = 'Steam profile of ' + res.name;
+      a.addEventListener('click', (e) => e.stopPropagation());
+      out.appendChild(a);
+    } else if (res.state === 'unknown') {
+      out.classList.add('mk-owner-unk');
+      out.textContent = 'owner unknown';
+    }
+  }
+
+  async function onOwnerClick(btn) {
+    if (btn.__mkBusy) return;
+    btn.__mkBusy = true;
+    const row = rowOf(btn);
+    try {
+      showOwner(row, btn, null, 'owner: loading…');
+      const id = await assetIdOf(btn);
+      if (!id) { showOwner(row, btn, { state: 'error', why: 'ID not found' }); return; }
+      const res = await lookupOwner(id);
+      showOwner(row, btn, res);
+    } catch (e) {
+      showOwner(row, btn, { state: 'error', why: 'error' });
+    } finally {
+      btn.__mkBusy = false;
+    }
+  }
+
+  function makeOwnerButton(histBtn) {
+    const b = histBtn.cloneNode(true);
+    b.classList.remove('mk-hist');
+    b.classList.add('mk-owner', 'mk-under');
+    b.title = 'Show the current owner (from the backpack.tf history)';
+    const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+    let t;
+    while ((t = w.nextNode())) {
+      if (t.nodeValue.trim()) { t.nodeValue = 'Owner'; b.__mkLabel = t; break; }
+    }
+    const svg = b.querySelector('svg');
+    if (svg) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = OWNER_ICON;
+      const ns = tmp.firstChild;
+      ['class', 'width', 'height', 'style'].forEach((a) => { if (svg.hasAttribute(a)) ns.setAttribute(a, svg.getAttribute(a)); });
+      svg.replaceWith(ns);
+    }
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      onOwnerClick(b);
+    }, true);
+    return b;
+  }
+  const OWNER_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>';
+
+  // one Owner button per listing row, under the price (next to BP History if no price cell is found)
+  function addOwnerButton(histBtn) {
+    const row = rowOf(histBtn);
+    if (row.querySelector('.mk-owner')) return;
+    const b = makeOwnerButton(histBtn);
+    const host = priceHostOf(row);
+    if (host) {
+      host.appendChild(b);
+    } else {
+      b.classList.remove('mk-under');
+      histBtn.insertAdjacentElement('afterend', b);
+    }
+  }
+
   function ensureHistoryButtons() {
     // only on TF2 item pages (/item/440-..., /p2p/tf2/...), nowhere else (trades, inventory, other games)
     if (!isTf2Ref(location.pathname)) {
-      document.querySelectorAll('.mk-hist').forEach((b) => b.remove());
+      document.querySelectorAll('.mk-hist, .mk-owner, .mk-owner-res').forEach((b) => b.remove());
       return;
     }
     findViewButtons(document.body).forEach((orig) => {
       const parent = orig.parentElement;
-      if (!parent || parent.querySelector(':scope > .mk-hist')) return;
+      if (!parent) return;
+      const haveHist = parent.querySelector(':scope > .mk-hist');
+      if (haveHist) {
+        addOwnerButton(haveHist);
+        return;
+      }
 
       const clone = orig.cloneNode(true);   // same look as the neighbouring buttons
       clone.classList.add('mk-hist');
@@ -1123,6 +1337,7 @@
       }, true);
 
       parent.appendChild(clone);   // last button in the Action column
+      addOwnerButton(clone);
     });
   }
 
